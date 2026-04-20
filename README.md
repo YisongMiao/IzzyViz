@@ -571,3 +571,5 @@ If you have any questions or need assistance, feel free to open an issue on GitH
 ---
 
 Thank you for using **IzzyViz**! We hope this tool aids in your exploration and understanding of attention mechanisms in transformer models.
+
+<!-- Test line added to verify git remote setup is working correctly. -->
