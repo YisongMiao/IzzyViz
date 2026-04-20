@@ -22,7 +22,13 @@ from scipy.stats import median_abs_deviation
 
 OUT = os.path.dirname(os.path.abspath(__file__))
 SEED = 42
+PNG_DPI = 200
 np.random.seed(SEED)
+
+def save_both(fig, stem):
+    fig.savefig(os.path.join(OUT, f"{stem}.pdf"))
+    fig.savefig(os.path.join(OUT, f"preview_{stem}.png"),
+                dpi=PNG_DPI, bbox_inches="tight")
 
 T = 12
 L, H = 12, 12
@@ -222,10 +228,12 @@ def color_for(label):
 # ----------------------------------------------------------------------
 
 def fig1():
-    fig, axes = plt.subplots(L, H, figsize=(10, 10))
+    fig, axes = plt.subplots(L, H, figsize=(11, 11))
     fig.suptitle("Figure 1: All 144 attention heads (12 layers x 12 heads)\n"
-                 "BERT-base, single sentence, T = 12 tokens",
+                 "Thumbnail border color = cluster assignment (same palette as Figs 2 and 3)\n"
+                 "Thick black frame = cluster medoid. Gray border = outlier.",
                  fontsize=11)
+    medoid_set = set(medoid[c] for c in retained)
     for l in range(L):
         for h in range(H):
             i = l * H + h
@@ -233,18 +241,31 @@ def fig1():
             ax.imshow(matrices[i], cmap="Blues", vmin=0, vmax=0.6,
                       interpolation="nearest")
             ax.set_xticks([]); ax.set_yticks([])
+            border_color = color_for(display[i])
+            is_med = i in medoid_set
+            border_width = 2.5 if is_med else 1.2
             for spine in ax.spines.values():
-                spine.set_linewidth(0.2)
-        axes[l, 0].set_ylabel(f"L{l}", fontsize=6, rotation=0, labelpad=8)
+                spine.set_edgecolor(border_color)
+                spine.set_linewidth(border_width)
+            if is_med:
+                for spine in ax.spines.values():
+                    spine.set_edgecolor("black")
+                    spine.set_linewidth(2.5)
+                ax.add_patch(mpatches.Rectangle(
+                    (-0.5, -0.5), T, T, fill=False,
+                    edgecolor=color_for(display[i]), linewidth=4.0,
+                    transform=ax.transData, clip_on=False))
+        axes[l, 0].set_ylabel(f"L{l}", fontsize=7.5, rotation=0,
+                              labelpad=10, fontweight="bold")
     for h in range(H):
-        axes[0, h].set_title(f"H{h}", fontsize=6, pad=2)
-    fig.text(0.5, 0.04,
-             "Takeaway: the grid is visually overwhelming. Many heads look alike; a few look unique. "
-             "We need triage before rendering anything at publication quality.",
+        axes[0, h].set_title(f"H{h}", fontsize=7.5, pad=3, fontweight="bold")
+    fig.text(0.5, 0.035,
+             "Takeaway: once each thumbnail is colored by cluster, the six archetype "
+             "regions (and the gray outliers) become visible at a glance.",
              ha="center", fontsize=9, style="italic")
-    plt.subplots_adjust(left=0.04, right=0.98, top=0.92, bottom=0.09,
-                        wspace=0.08, hspace=0.08)
-    fig.savefig(os.path.join(OUT, "fig1_head_grid.pdf"))
+    plt.subplots_adjust(left=0.045, right=0.985, top=0.91, bottom=0.075,
+                        wspace=0.12, hspace=0.12)
+    save_both(fig, "fig1_head_grid")
     plt.close(fig)
 
 # ----------------------------------------------------------------------
@@ -278,7 +299,7 @@ def fig2():
     ax.set_ylabel("Ward linkage distance")
     ax.legend(loc="upper right")
     fig.tight_layout()
-    fig.savefig(os.path.join(OUT, "fig2_dendrogram.pdf"))
+    save_both(fig, "fig2_dendrogram")
     plt.close(fig)
 
 # ----------------------------------------------------------------------
@@ -315,7 +336,7 @@ def fig3():
     ax.grid(alpha=0.2)
     ax.legend(loc="best", fontsize=9, framealpha=0.9)
     fig.tight_layout()
-    fig.savefig(os.path.join(OUT, "fig3_head_space.pdf"))
+    save_both(fig, "fig3_head_space")
     plt.close(fig)
 
 # ----------------------------------------------------------------------
@@ -353,7 +374,7 @@ def fig4():
     fig.suptitle("Figure 4: Archetype gallery. Top row: medoid heatmap per cluster.\n"
                  "Bottom row: cluster-mean feature signature (the 'why' of the label).",
                  fontsize=11, y=0.98)
-    fig.savefig(os.path.join(OUT, "fig4_archetypes.pdf"))
+    save_both(fig, "fig4_archetypes")
     plt.close(fig)
 
 # ----------------------------------------------------------------------
@@ -379,7 +400,7 @@ def fig5():
                  "These are the heads that resist compression into an archetype.",
                  fontsize=11)
     fig.tight_layout(rect=[0, 0, 1, 0.94])
-    fig.savefig(os.path.join(OUT, "fig5_outliers.pdf"))
+    save_both(fig, "fig5_outliers")
     plt.close(fig)
 
 # ----------------------------------------------------------------------
@@ -396,6 +417,18 @@ def summary():
     print(f"Ward cut distance: {Zlink[-(K - 1), 2]:.3f}")
     print(f"PC1 variance: {100 * S_[0] ** 2 / (S_ ** 2).sum():.1f}%   "
           f"PC2 variance: {100 * S_[1] ** 2 / (S_ ** 2).sum():.1f}%")
+
+    print("\nMedoid feature values (raw, un-z-scored):")
+    hdr = "  " + "archetype".ljust(18) + "medoid".ljust(9) + \
+          "".join(f.rjust(11) for f in FEATURE_NAMES)
+    print(hdr)
+    print("  " + "-" * (len(hdr) - 2))
+    for c in retained:
+        mi = medoid[c]
+        row = "  " + cluster_label_text.get(c, f"C{c}").ljust(18) + \
+              f"L{layer_idx[mi]}H{head_idx[mi]}".ljust(9) + \
+              "".join(f"{F[mi][k]:>11.2f}" for k in range(len(FEATURE_NAMES)))
+        print(row)
 
 if __name__ == "__main__":
     fig1(); fig2(); fig3(); fig4(); fig5()
