@@ -274,30 +274,52 @@ def fig1():
 
 def fig2():
     fig, ax = plt.subplots(figsize=(12, 5.5))
-    leaf_colors_map = {}
-    def leaf_color_func(leaf_id):
-        c = raw_labels[leaf_id]
-        rgb = cluster_color.get(c, (0.55, 0.55, 0.55))
-        return "#%02x%02x%02x" % tuple(int(255 * x) for x in rgb)
 
-    from scipy.cluster.hierarchy import set_link_color_palette
-    set_link_color_palette([
-        "#%02x%02x%02x" % tuple(int(255 * x) for x in cluster_color[c])
-        for c in retained
-    ])
-    # cut threshold for K clusters
+    from scipy.cluster.hierarchy import set_link_color_palette, leaves_list
+    from matplotlib.lines import Line2D
+
+    dendro_palette_tab10 = plt.cm.tab10.colors
+    dendro_palette_hex = [
+        "#%02x%02x%02x" % tuple(int(255 * x) for x in dendro_palette_tab10[i])
+        for i in range(len(retained))
+    ]
+    set_link_color_palette(dendro_palette_hex)
     cut = Zlink[-(K - 1), 2]
 
     dendrogram(Zlink, color_threshold=cut, above_threshold_color="#888888",
                no_labels=True, ax=ax)
-    ax.axhline(cut, color="red", linestyle="--", linewidth=1,
-               label=f"cut at d = {cut:.2f}  (K = {K} clusters)")
+    cut_line = ax.axhline(cut, color="red", linestyle="--", linewidth=1,
+                          label=f"cut at d = {cut:.2f}  (K = {K} clusters)")
     ax.set_title("Figure 2: Ward hierarchical clustering on z-scored features\n"
                  "Each leaf is one of the 144 heads; horizontal cut selects cluster count",
                  fontsize=11)
     ax.set_xlabel("144 heads (ordered by merge)")
     ax.set_ylabel("Ward linkage distance")
-    ax.legend(loc="upper right")
+
+    # Map each cluster to the palette color scipy actually painted its subtree.
+    # scipy assigns palette colors in the order each below-threshold subtree is
+    # encountered during left-to-right drawing; leaves_list gives that order.
+    dendro_leaf_order = leaves_list(Zlink)
+    cluster_first_drawing_pos = {}
+    for pos, original_idx in enumerate(dendro_leaf_order):
+        c = raw_labels[original_idx]
+        if c not in cluster_first_drawing_pos:
+            cluster_first_drawing_pos[c] = pos
+    subtree_cluster_order = sorted(
+        retained, key=lambda c: cluster_first_drawing_pos[c]
+    )
+    handles = []
+    for idx, c in enumerate(subtree_cluster_order):
+        color = dendro_palette_hex[idx % len(dendro_palette_hex)]
+        handles.append(Line2D([0], [0], color=color, lw=4,
+                              label=cluster_label_text.get(c, f"cluster {c}")))
+
+    legend_clusters = ax.legend(handles=handles, loc="upper left",
+                                title="Subtree color  =  cluster",
+                                fontsize=9, title_fontsize=9, framealpha=0.92)
+    ax.add_artist(legend_clusters)
+    ax.legend(handles=[cut_line], loc="upper right", fontsize=9, framealpha=0.92)
+
     fig.tight_layout()
     save_both(fig, "fig2_dendrogram")
     plt.close(fig)
@@ -307,34 +329,64 @@ def fig2():
 # ----------------------------------------------------------------------
 
 def fig3():
-    fig, ax = plt.subplots(figsize=(9, 7.2))
-    for c in retained:
-        mask = (raw_labels == c) & (~is_outlier)
-        ax.scatter(pc[mask, 0], pc[mask, 1],
-                   color=cluster_color[c], s=45, alpha=0.82,
-                   edgecolor="white", linewidth=0.5,
-                   label=cluster_label_text.get(c, f"cluster {c}"))
-    ax.scatter(pc[is_outlier, 0], pc[is_outlier, 1],
-               color="red", marker="x", s=70,
-               linewidth=1.4, label="outlier (far from medoid)")
+    fig, ax = plt.subplots(figsize=(9.5, 7.5))
+    rng = np.random.default_rng(SEED + 1)
+
+    JITTER_STD = 1.0
+    jitter = rng.normal(0.0, JITTER_STD, size=pc.shape)
+    medoid_set = set(medoid[c] for c in retained)
+    pc_disp = pc.copy()
+    for i in range(N):
+        if i not in medoid_set:
+            pc_disp[i] = pc[i] + jitter[i]
 
     for c in retained:
         mi = medoid[c]
-        ax.scatter(pc[mi, 0], pc[mi, 1], marker="*",
-                   s=260, color=cluster_color[c],
-                   edgecolor="black", linewidth=1.0, zorder=5)
-        ax.annotate(f"L{layer_idx[mi]}H{head_idx[mi]}",
-                    (pc[mi, 0], pc[mi, 1]),
-                    xytext=(6, 6), textcoords="offset points",
-                    fontsize=8, fontweight="bold")
+        ax.scatter(pc[mi, 0], pc[mi, 1],
+                   s=2200, facecolor=cluster_color[c],
+                   edgecolor="none", alpha=0.12, zorder=1)
+
+    for c in retained:
+        mask = (raw_labels == c) & (~is_outlier)
+        mask_nonmed = mask.copy()
+        for mi_ in medoid_set:
+            mask_nonmed[mi_] = False
+        ax.scatter(pc_disp[mask_nonmed, 0], pc_disp[mask_nonmed, 1],
+                   color=cluster_color[c], s=48, alpha=0.75,
+                   edgecolor="white", linewidth=0.5, zorder=3,
+                   label=cluster_label_text.get(c, f"cluster {c}"))
+
+    ax.scatter(pc_disp[is_outlier, 0], pc_disp[is_outlier, 1],
+               color="red", marker="x", s=75,
+               linewidth=1.5, zorder=4, label="outlier (far from medoid)")
+
+    for c in retained:
+        mi = medoid[c]
+        ax.scatter(pc[mi, 0], pc[mi, 1],
+                   s=360, color=cluster_color[c],
+                   edgecolor="black", linewidth=1.8, zorder=5)
+        ax.scatter(pc[mi, 0], pc[mi, 1],
+                   s=52, color="white",
+                   edgecolor="black", linewidth=0.7, zorder=6)
+        ax.annotate(
+            f"L{layer_idx[mi]}H{head_idx[mi]}   n={sizes[c]}",
+            (pc[mi, 0], pc[mi, 1]),
+            xytext=(12, 10), textcoords="offset points",
+            fontsize=8.5, fontweight="bold",
+            bbox=dict(boxstyle="round,pad=0.25",
+                      facecolor="white", alpha=0.9,
+                      edgecolor=cluster_color[c], linewidth=0.8),
+            zorder=7,
+        )
 
     ax.set_title("Figure 3: Head space (PCA on 6 z-scored features)\n"
-                 "Colored dots = cluster members; stars = medoids; red crosses = outliers",
+                 "Jittered dots reveal stacked heads; bullseye = medoid; halo area "
+                 "is proportional to cluster size",
                  fontsize=11)
     ax.set_xlabel(f"PC 1  ({100 * S_[0] ** 2 / (S_ ** 2).sum():.1f}% variance)")
     ax.set_ylabel(f"PC 2  ({100 * S_[1] ** 2 / (S_ ** 2).sum():.1f}% variance)")
     ax.grid(alpha=0.2)
-    ax.legend(loc="best", fontsize=9, framealpha=0.9)
+    ax.legend(loc="upper left", fontsize=9, framealpha=0.9)
     fig.tight_layout()
     save_both(fig, "fig3_head_space")
     plt.close(fig)

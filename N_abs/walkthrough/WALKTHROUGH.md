@@ -94,7 +94,7 @@ Ward's algorithm is a bottom-up tree builder. It starts with 144 singletons and,
 
 Figure 2 shows the resulting tree. Every leaf at the bottom is one head; every horizontal bar is a merge. The higher the bar, the more different the two groups being merged are.
 
-**The branch colors match Figure 1's thumbnail borders and Figure 3's scatter dots.** So the blue subtree at the far left is the same set of heads that carry blue borders in Figure 1 and blue dots in Figure 3, namely the Diagonal archetype. The orange, green, red, purple, and brown subtrees follow the same rule. This shared color scheme is what lets you trace a cluster visually across all three overview figures.
+**The branch colors match Figure 1's thumbnail borders and Figure 3's scatter dots**, and the upper-left legend now names each subtree color explicitly (blue → Diagonal, orange → SEP-parking, green → CLS-broadcaster, red → Previous-token, purple → Local window, brown → Broad mixer). So the blue subtree at the far left is the same set of heads that carry blue borders in Figure 1 and blue dots in Figure 3. This shared color scheme is what lets you trace a cluster visually across all three overview figures.
 
 The red dashed line at `d ≈ 123.5` is our **cut**. Every vertical line the red line crosses becomes one cluster. Six vertical lines cross here, so we get **K = 6 clusters**. We picked 6 because that is where the tree has a clean gap: cutting lower gives many small clusters, cutting higher collapses meaningful structure.
 
